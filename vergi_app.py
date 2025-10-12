@@ -2,10 +2,10 @@ import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
 
-# Sayfa ayarları (mobil ikon için)
+# Sayfa ayarları (ilk satırda olmalı)
 st.set_page_config(
     page_title="Vergi Hesaplayıcı",
-    page_icon="static/icon.png",  # static klasöründe icon.png olmalı
+    page_icon="static/icon.png",
     layout="centered"
 )
 
@@ -76,8 +76,12 @@ if gelir > 0:
     st.subheader("📅 Dönemsel Özet")
     df = pd.DataFrame({
         "Dönem": ["1. Geçici", "2. Geçici", "3. Geçici", "4. Geçici"],
-        "Gelir": [gelir/4]*4,
-        "Gider": [gider/4]*4,
-        "Vergi": [gecici_vergi_taksit]*4
+        "Gelir": [gelir / 4] * 4,
+        "Gider": [gider / 4] * 4,
+        "Vergi": [gecici_vergi_taksit] * 4
     })
-    st.dataframe(df.style.format({"Gelir": "₺{:.2f}", "Gider": "₺{:.2f}", "Vergi": "₺{:.2f}"}))
+    st.dataframe(df.style.format({
+        "Gelir": "₺{:.2f}",
+        "Gider": "₺{:.2f}",
+        "Vergi": "₺{:.2f}"
+    }))
