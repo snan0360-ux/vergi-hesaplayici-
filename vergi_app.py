@@ -1,87 +1,106 @@
 import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
+import os
 
-# Sayfa ayarları (ilk satırda olmalı)
+# Sayfa ayarları (mobil tam ekran + ikon kontrolü)
 st.set_page_config(
     page_title="Vergi Hesaplayıcı",
-    page_icon="static/icon.png",
-    layout="centered"
+    page_icon="static/icon.png",  # ikon dosyasını static klasörüne koy
+    layout="wide"  # mobilde daha rahat görünüm için wide
 )
 
+# İkon dosyası kontrolü (lokal test için)
+if not os.path.exists("static/icon.png"):
+    st.warning("⚠️ İkon dosyası bulunamadı. Lütfen 'static/icon.png' dosyasını yükleyin.")
+
 st.title("📦 Şahıs Firması Vergi Hesaplayıcı (2025)")
+st.markdown("KDV dahil gelir girerek 3 aylık geçici vergi, yıllık gelir vergisi ve mahsup sonrası kalan tutarı hesaplayın.")
 
 # Girdi alanları
-gelir = st.number_input("KDV Dahil Toplam Gelir (₺)", min_value=0.0, step=100.0)
-gider = st.number_input("Toplam Gider (₺)", min_value=0.0, step=100.0)
-kdv_orani = st.slider("KDV Oranı (%)", min_value=1, max_value=20, value=20)
+gelir_brut = st.number_input("Aylık Gelir (KDV Dahil) (₺)", min_value=0.0)
+gider = st.number_input("Aylık Gider (₺)", min_value=0.0)
+kdv_orani = st.selectbox("KDV Oranı", [0.01, 0.10, 0.20], index=2)
 
-if gelir > 0:
-    # KDV ayrıştırma
-    kdv_tutari = gelir * kdv_orani / (100 + kdv_orani)
-    net_gelir = gelir - kdv_tutari
-    net_kazanc = net_gelir - gider
+# KDV hariç gelir ve net kazanç
+gelir_kdv_haric = gelir_brut / (1 + kdv_orani)
+kdv = gelir_brut - gelir_kdv_haric
+net_kazanc = gelir_kdv_haric - gider
 
-    st.subheader("📊 Hesaplama Sonuçları")
-    st.write(f"**KDV Tutarı:** ₺{kdv_tutari:,.2f}")
-    st.write(f"**Net Gelir (KDV Hariç):** ₺{net_gelir:,.2f}")
-    st.write(f"**Net Kazanç:** ₺{net_kazanc:,.2f}")
+# Gerçek kademeli vergi fonksiyonu
+def kademeli_gelir_vergisi(matrah):
+    vergi = 0
+    dilimler = [
+        (0, 110000, 0.15),
+        (110000, 230000, 0.20),
+        (230000, 870000, 0.27),
+        (870000, 3000000, 0.35),
+        (3000000, float('inf'), 0.40)
+    ]
+    for alt, ust, oran in dilimler:
+        if matrah > alt:
+            vergilendirilen = min(matrah, ust) - alt
+            vergi += vergilendirilen * oran
+    return vergi
 
-    # Geçici vergi (3 ayda bir)
-    gecici_vergi_orani = 0.15
-    gecici_vergi_toplam = net_kazanc * gecici_vergi_orani
-    gecici_vergi_taksit = gecici_vergi_toplam / 4
+# Geçici vergi (3 aylık net kazanç üzerinden)
+gecici_matrah = net_kazanc * 3
+gecici_vergi = kademeli_gelir_vergisi(gecici_matrah)
 
-    # Yıllık gelir vergisi (kademeli)
-    def gelir_vergisi_hesapla(kazanc):
-        kalan = kazanc
-        vergi = 0
-        dilimler = [
-            (110000, 0.15),
-            (230000, 0.20),
-            (870000, 0.27),
-            (3000000, 0.35),
-            (float("inf"), 0.40)
-        ]
-        onceki_limit = 0
-        for limit, oran in dilimler:
-            fark = min(kalan, limit - onceki_limit)
-            vergi += fark * oran
-            kalan -= fark
-            onceki_limit = limit
-            if kalan <= 0:
-                break
-        return vergi
+# Yıllık vergi (12 aylık net kazanç üzerinden)
+yillik_matrah = net_kazanc * 12
+yillik_vergi = kademeli_gelir_vergisi(yillik_matrah)
 
-    gelir_vergisi = gelir_vergisi_hesapla(net_kazanc)
-    mahsup = gecici_vergi_toplam
-    kalan_vergi = max(gelir_vergisi - mahsup, 0)
-    taksit = kalan_vergi / 2
+# Geçici vergi toplamı (4 dönem)
+gecici_vergi_toplam = gecici_vergi * 4
 
-    st.write(f"**Yıllık Gelir Vergisi:** ₺{gelir_vergisi:,.2f}")
-    st.write(f"**Mahsup Edilen Geçici Vergi:** ₺{mahsup:,.2f}")
-    st.write(f"**Kalan Vergi:** ₺{kalan_vergi:,.2f}")
-    st.write(f"**2 Taksit (Haziran-Aralık):** ₺{taksit:,.2f} x2")
+# Mahsup sonrası kalan tutar
+kalan_vergi = max(yillik_vergi - gecici_vergi_toplam, 0)
+taksit_sayisi = 2
+taksit_tutari = kalan_vergi / taksit_sayisi
 
-    # Grafik
+# Sonuçlar
+st.subheader("📊 Hesaplama Sonuçları")
+st.write(f"**KDV Hariç Gelir:** ₺{gelir_kdv_haric:,.2f}")
+st.write(f"**KDV Tutarı ({kdv_orani*100:.0f}%):** ₺{kdv:,.2f}")
+st.write(f"**Net Kazanç (Aylık):** ₺{net_kazanc:,.2f}")
+st.write(f"**Geçici Vergi (3 Aylık):** ₺{gecici_vergi:,.2f}")
+st.write(f"**Yıllık Gelir Vergisi (12 Ay):** ₺{yillik_vergi:,.2f}")
+
+# Mahsup ve taksit planı
+st.subheader("📆 Yıl Sonu Mahsup ve Taksit Planı")
+st.write(f"**Ödenmiş Geçici Vergi (Yıl Boyunca):** ₺{gecici_vergi_toplam:,.2f}")
+st.write(f"**Mahsup Sonrası Kalan Tutar:** ₺{kalan_vergi:,.2f}")
+
+if kalan_vergi > 0:
+    st.write(f"**1. Taksit (Mart):** ₺{taksit_tutari:,.2f}")
+    st.write(f"**2. Taksit (Temmuz):** ₺{taksit_tutari:,.2f}")
+else:
+    st.success("Yıl boyunca ödediğiniz geçici vergiler, yıllık vergiyi tamamen karşılıyor. Ek ödeme yok.")
+
+# Grafik
+if gelir_brut > 0 and gider >= 0:
+    st.subheader("📈 3 Aylık Dağılım Grafiği")
+    labels = ['Gider (3 Ay)', 'KDV (3 Ay)', 'Geçici Vergi']
+    values = [gider * 3, kdv * 3, gecici_vergi]
+
     fig, ax = plt.subplots()
-    labels = ['Gider', 'KDV', 'Vergi', 'Net']
-    values = [gider, kdv_tutari, gelir_vergisi, net_kazanc - gelir_vergisi]
-    ax.bar(labels, values, color=['gray', 'orange', 'red', 'green'])
-    ax.set_ylabel("₺")
-    ax.set_title("Kazanç Dağılımı")
+    ax.pie(values, labels=labels, autopct='%1.1f%%', startangle=90)
+    ax.axis('equal')
     st.pyplot(fig)
 
-    # Tablo
-    st.subheader("📅 Dönemsel Özet")
-    df = pd.DataFrame({
-        "Dönem": ["1. Geçici", "2. Geçici", "3. Geçici", "4. Geçici"],
-        "Gelir": [gelir / 4] * 4,
-        "Gider": [gider / 4] * 4,
-        "Vergi": [gecici_vergi_taksit] * 4
-    })
-    st.dataframe(df.style.format({
-        "Gelir": "₺{:.2f}",
-        "Gider": "₺{:.2f}",
-        "Vergi": "₺{:.2f}"
-    }))
+# Dönemsel tablo
+st.subheader("📅 Dönemsel Kayıt (Örnek)")
+veri = {
+    "Dönem": ["Ocak–Mart", "Nisan–Haziran", "Temmuz–Eylül", "Ekim–Aralık"],
+    "Gelir (KDV Dahil)": [gelir_brut * 3]*4,
+    "Gider": [gider * 3]*4,
+    "Net Kazanç": [net_kazanc * 3]*4,
+    "KDV": [kdv * 3]*4,
+    "Geçici Vergi": [gecici_vergi]*4
+}
+df = pd.DataFrame(veri)
+st.dataframe(df)
+
+st.markdown("---")
+st.caption("🧮 Vergi dilimleri 2025 tarifesine göre kademeli uygulanır. Geçici vergi 3 ayda bir beyan edilir. Yıllık vergi Mart ayında beyan edilir. Geçici vergiler yıl sonu vergiden düşülür.")
