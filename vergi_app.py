@@ -2,10 +2,10 @@ import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
 
-# Sayfa ayarları (mobil ikon için)
+# Sayfa ayarları (ikon dosyası varsa static/icon.png)
 st.set_page_config(
     page_title="Vergi Hesaplayıcı",
-    page_icon="static/icon.png",  # static klasöründe icon.png olmalı
+    page_icon="static/icon.png",
     layout="centered"
 )
 
@@ -55,8 +55,7 @@ if gelir > 0:
 
     gelir_vergisi = gelir_vergisi_hesapla(net_kazanc)
     mahsup = gecici_vergi_toplam
-    kalan_vergi = gelir_vergisi - mahsup
-    kalan_vergi = max(kalan_vergi, 0)
+    kalan_vergi = max(gelir_vergisi - mahsup, 0)
     taksit = kalan_vergi / 2
 
     st.write(f"**Yıllık Gelir Vergisi:** ₺{gelir_vergisi:,.2f}")
@@ -66,7 +65,7 @@ if gelir > 0:
 
     # Grafik
     fig, ax = plt.subplots()
-    labels = ['Gider', 'KDV', 'Vergi', 'Net Kazanç']
+    labels = ['Gider', 'KDV', 'Vergi', 'Net']
     values = [gider, kdv_tutari, gelir_vergisi, net_kazanc - gelir_vergisi]
     ax.bar(labels, values, color=['gray', 'orange', 'red', 'green'])
     ax.set_ylabel("₺")
